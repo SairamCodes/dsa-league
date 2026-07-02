@@ -5,7 +5,10 @@ from app.db import get_engine, Base
 
 app = FastAPI(title="DSA League API", version="1.0.0")
 
-origins = ["http://localhost:3000"]
+origins = [
+    "http://localhost:3000",
+    "https://dsaleague1.netlify.app",
+]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
