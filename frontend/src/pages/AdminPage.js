@@ -4,6 +4,7 @@ import Card from "../components/Card";
 import client from "../api/client";
 
 export default function AdminPage() {
+
   const [members, setMembers] = useState([]);
   const [entries, setEntries] = useState([]);
 
@@ -13,6 +14,7 @@ export default function AdminPage() {
 
   async function loadData() {
     try {
+
       const [membersRes, entriesRes] = await Promise.all([
         client.get("/admin/members"),
         client.get("/admin/entries/pending"),
@@ -20,6 +22,7 @@ export default function AdminPage() {
 
       setMembers(membersRes.data);
       setEntries(entriesRes.data);
+
     } catch (err) {
       console.log(err);
     }
@@ -36,14 +39,59 @@ export default function AdminPage() {
   }
 
   async function resetPassword(id) {
-    if (!window.confirm("Reset password?")) return;
 
-    await client.put(`/admin/members/${id}/reset-password`);
+    if (!window.confirm("Reset this user's password?"))
+      return;
 
-    alert("Password reset successfully.");
+    try {
+
+      await client.put(
+        `/admin/members/${id}/reset-password`
+      );
+
+      alert("Password reset successfully.");
+
+    } catch (err) {
+
+      alert(
+        err.response?.data?.detail ||
+        "Unable to reset password."
+      );
+
+    }
+
+  }
+
+  async function deleteUser(id) {
+
+    if (!window.confirm("Delete this user permanently?"))
+      return;
+
+    try {
+
+      await client.delete(
+        `/admin/members/${id}`
+      );
+
+      setMembers(
+        members.filter((m) => m.id !== id)
+      );
+
+      alert("User deleted successfully.");
+
+    } catch (err) {
+
+      alert(
+        err.response?.data?.detail ||
+        "Unable to delete user."
+      );
+
+    }
+
   }
 
   return (
+
     <Shell>
 
       <div className="space-y-6">
@@ -56,39 +104,46 @@ export default function AdminPage() {
 
               <div
                 key={member.id}
-                className="rounded-xl border border-slate-700 bg-slate-800 p-4 flex justify-between items-center"
+                className="rounded-xl border border-slate-700 bg-slate-800 p-4 flex items-center justify-between"
               >
 
                 <div>
 
-                  <h3 className="text-white font-semibold">
-
+                  <h3 className="text-lg font-semibold text-white">
                     {member.full_name}
-
                   </h3>
 
                   <p className="text-slate-400">
-
                     {member.username}
-
                   </p>
 
                   <p className="text-cyan-400">
-
                     {member.role}
-
                   </p>
 
                 </div>
 
-                <button
-                  onClick={() =>
-                    resetPassword(member.id)
-                  }
-                  className="rounded-lg bg-yellow-500 px-4 py-2 text-black font-semibold"
-                >
-                  Reset Password
-                </button>
+                <div className="flex gap-3">
+
+                  <button
+                    onClick={() => resetPassword(member.id)}
+                    className="rounded-lg bg-yellow-500 px-4 py-2 font-semibold text-black hover:bg-yellow-400"
+                  >
+                    Reset Password
+                  </button>
+
+                  {member.role !== "admin" && (
+
+                    <button
+                      onClick={() => deleteUser(member.id)}
+                      className="rounded-lg bg-red-600 px-4 py-2 font-semibold text-white hover:bg-red-500"
+                    >
+                      Delete
+                    </button>
+
+                  )}
+
+                </div>
 
               </div>
 
@@ -103,9 +158,7 @@ export default function AdminPage() {
           {entries.length === 0 ? (
 
             <p className="text-slate-400">
-
               No pending entries.
-
             </p>
 
           ) : (
@@ -119,34 +172,26 @@ export default function AdminPage() {
                   className="rounded-xl border border-slate-700 bg-slate-800 p-4"
                 >
 
-                  <h3 className="text-white font-bold">
-
+                  <h3 className="font-bold text-white">
                     {entry.problem_name}
-
                   </h3>
 
-                  <p className="text-slate-400">
-
+                  <p className="mt-1 text-slate-400">
                     {entry.platform} • {entry.pattern}
-
                   </p>
 
                   <div className="mt-4 flex gap-3">
 
                     <button
-                      onClick={() =>
-                        approve(entry.id)
-                      }
-                      className="rounded-lg bg-green-500 px-4 py-2 font-semibold text-black"
+                      onClick={() => approve(entry.id)}
+                      className="rounded-lg bg-green-500 px-4 py-2 font-semibold text-black hover:bg-green-400"
                     >
                       Approve
                     </button>
 
                     <button
-                      onClick={() =>
-                        reject(entry.id)
-                      }
-                      className="rounded-lg bg-red-500 px-4 py-2 font-semibold text-white"
+                      onClick={() => reject(entry.id)}
+                      className="rounded-lg bg-red-600 px-4 py-2 font-semibold text-white hover:bg-red-500"
                     >
                       Reject
                     </button>
@@ -166,5 +211,7 @@ export default function AdminPage() {
       </div>
 
     </Shell>
+
   );
+
 }
