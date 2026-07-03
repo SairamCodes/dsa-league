@@ -1,9 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+
+from app.auth import (
+    get_current_admin_user,
+    get_password_hash,
+)
 from app.db import get_session
-from app.auth import get_current_admin_user, get_password_hash
-from app.models import User, DailyEntry
+from app.models import Role, User, DailyEntry
 from app.schemas import UserList
 
 router = APIRouter()
@@ -31,16 +35,47 @@ async def add_member(payload: UserList, current_user: User = Depends(get_current
     await session.commit()
     await session.refresh(user)
     return UserList.from_orm(user)
+@router.delete("/members/{user_id}")
+async def delete_member(
+    user_id: int,
+    current_user: User = Depends(get_current_admin_user),
+    session: AsyncSession = Depends(get_session),
+):
 
-@router.delete("/members/{member_id}")
-async def remove_member(member_id: int, current_user: User = Depends(get_current_admin_user), session: AsyncSession = Depends(get_session)):
-    result = await session.execute(select(User).where(User.id == member_id))
+    result = await session.execute(
+        select(User).where(User.id == user_id)
+    )
+
     user = result.scalars().first()
+
     if not user:
-        raise HTTPException(status_code=404, detail="Member not found")
+        raise HTTPException(
+            status_code=404,
+            detail="User not found",
+        )
+
+    from app.models import Role
+
+    if user.role == Role.admin:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot delete admin account",
+        )
+
+    await session.execute(
+        delete(DailyEntry).where(
+            DailyEntry.user_id == user.id
+        )
+    )
+
     await session.delete(user)
+
     await session.commit()
-    return {"message": "Member removed"}
+
+    return {
+        "message": "User deleted successfully"
+    }
+
 
 @router.put("/members/{member_id}", response_model=UserList)
 async def edit_member(member_id: int, payload: UserList, current_user: User = Depends(get_current_admin_user), session: AsyncSession = Depends(get_session)):
