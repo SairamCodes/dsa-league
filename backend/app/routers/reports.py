@@ -2,7 +2,7 @@ from collections import Counter
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_active_user
@@ -137,6 +137,62 @@ async def monthly(
         30,
         "Monthly",
     )
+@router.get("/leaderboard")
+async def leaderboard(
+    current_user: User = Depends(get_current_active_user),
+    session: AsyncSession = Depends(get_session),
+):
+
+    result = await session.execute(
+        select(User)
+    )
+
+    users = result.scalars().all()
+
+    leaderboard = []
+
+    for user in users:
+
+        entries = (
+            await session.execute(
+                select(DailyEntry).where(
+                    DailyEntry.user_id == user.id,
+                    DailyEntry.approved == True,
+                )
+            )
+        ).scalars().all()
+
+        problems = len(entries)
+
+        total_score = sum(e.score for e in entries)
+
+        total_time = sum(e.time_taken for e in entries)
+
+        leaderboard.append(
+            {
+                "id": user.id,
+                "username": user.username,
+                "full_name": user.full_name,
+                "college": user.college,
+                "score": total_score,
+                "problems_solved": problems,
+                "total_time": total_time,
+                "role": user.role,
+            }
+        )
+
+    leaderboard.sort(
+        key=lambda x: (
+            x["score"],
+            x["problems_solved"],
+        ),
+        reverse=True,
+    )
+
+    for index, member in enumerate(leaderboard):
+        member["rank"] = index + 1
+
+    return leaderboard
 
 
 async def build_report(
