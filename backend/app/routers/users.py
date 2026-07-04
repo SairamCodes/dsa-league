@@ -96,8 +96,8 @@ async def build_profile(
         medium_count=medium,
         hard_count=hard,
 
-        current_streak=0,
-        longest_streak=0,
+        current_streak=user.current_streak,
+        longest_streak=user.longest_streak,
 
         average_time=float(average),
 
