@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, delete
+from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import (
@@ -106,16 +107,67 @@ async def reset_password(member_id: int, current_user: User = Depends(get_curren
 async def pending_entries(current_user: User = Depends(get_current_admin_user), session: AsyncSession = Depends(get_session)):
     result = await session.execute(select(DailyEntry).where(DailyEntry.approved == False).order_by(DailyEntry.created_at.desc()))
     return result.scalars().all()
-
 @router.put("/entries/{entry_id}/approve")
-async def approve_entry(entry_id: int, current_user: User = Depends(get_current_admin_user), session: AsyncSession = Depends(get_session)):
-    result = await session.execute(select(DailyEntry).where(DailyEntry.id == entry_id))
+async def approve_entry(
+    entry_id: int,
+    current_user: User = Depends(get_current_admin_user),
+    session: AsyncSession = Depends(get_session),
+):
+
+    result = await session.execute(
+        select(DailyEntry).where(DailyEntry.id == entry_id)
+    )
+
     entry = result.scalars().first()
+
     if not entry:
-        raise HTTPException(status_code=404, detail="Entry not found")
+        raise HTTPException(
+            status_code=404,
+            detail="Entry not found",
+        )
+
     entry.approved = True
+
+    # Get the user
+    result = await session.execute(
+        select(User).where(User.id == entry.user_id)
+    )
+
+    user = result.scalars().first()
+
+    today = datetime.utcnow().date()
+
+    if user.last_submission_date is None:
+
+        user.current_streak = 1
+        user.longest_streak = 1
+
+    else:
+
+        last_date = user.last_submission_date.date()
+
+        if last_date == today:
+            # Already counted today
+            pass
+
+        elif last_date == today - timedelta(days=1):
+
+            user.current_streak += 1
+
+        else:
+
+            user.current_streak = 1
+
+        if user.current_streak > user.longest_streak:
+            user.longest_streak = user.current_streak
+
+    user.last_submission_date = datetime.utcnow()
+
     await session.commit()
-    return {"message": "Entry approved"}
+
+    return {
+        "message": "Entry approved successfully"
+    }
 
 @router.put("/entries/{entry_id}/reject")
 async def reject_entry(entry_id: int, current_user: User = Depends(get_current_admin_user), session: AsyncSession = Depends(get_session)):
