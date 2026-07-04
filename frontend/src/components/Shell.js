@@ -14,20 +14,20 @@ export default function Shell({ children }) {
     loadProfile();
   }, []);
 
-  const loadProfile = async () => {
+  async function loadProfile() {
     try {
       const res = await client.get("/users/me");
       setUser(res.data);
     } catch (err) {
       console.log(err);
     }
-  };
+  }
 
-  const logout = () => {
+  function logout() {
     clearToken();
     setAuthToken(null);
     navigate("/login");
-  };
+  }
 
   return (
     <div className="min-h-screen bg-[#0f172a] text-white">
@@ -43,13 +43,20 @@ export default function Shell({ children }) {
             DSA League
           </Link>
 
-          <nav className="flex items-center gap-6 text-white">
+          <nav className="flex items-center gap-6">
 
             <Link
               to="/"
               className="hover:text-cyan-400"
             >
               Dashboard
+            </Link>
+
+            <Link
+              to="/leaderboard"
+              className="hover:text-cyan-400"
+            >
+              Leaderboard
             </Link>
 
             <Link
@@ -65,21 +72,6 @@ export default function Shell({ children }) {
             >
               Entries
             </Link>
-
-            {/* Only Admin can see Leaderboard */}
-
-            {user?.role === "admin" && (
-
-              <Link
-                to="/leaderboard"
-                className="hover:text-cyan-400"
-              >
-                Leaderboard
-              </Link>
-
-            )}
-
-            {/* Only Admin can see Admin Page */}
 
             {user?.role === "admin" && (
 
@@ -106,9 +98,7 @@ export default function Shell({ children }) {
       </header>
 
       <main className="mx-auto max-w-7xl px-8 py-8">
-
         {children}
-
       </main>
 
     </div>

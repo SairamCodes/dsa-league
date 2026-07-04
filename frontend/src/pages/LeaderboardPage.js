@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
+import client from "../api/client";
 import Shell from "../components/Shell";
 import Card from "../components/Card";
-import client from "../api/client";
 
 export default function LeaderboardPage() {
   const [leaders, setLeaders] = useState([]);
@@ -12,89 +12,82 @@ export default function LeaderboardPage() {
 
   async function loadLeaderboard() {
     try {
-      const res = await client.get("/entries/leaderboard");
-      setLeaders(res.data);
+      const response = await client.get("/reports/leaderboard");
+      setLeaders(response.data);
     } catch (err) {
       console.log(err);
     }
   }
 
+  function medal(rank) {
+    if (rank === 1) return "🥇";
+    if (rank === 2) return "🥈";
+    if (rank === 3) return "🥉";
+    return "🏅";
+  }
+
   return (
     <Shell>
+
       <Card title="🏆 DSA League Leaderboard">
 
-        <div className="overflow-x-auto">
+        <div className="space-y-4">
 
-          <table className="w-full border-collapse">
+          {leaders.map((user) => (
 
-            <thead>
+            <div
+              key={user.id}
+              className="flex items-center justify-between rounded-xl border border-slate-700 bg-slate-800 p-5 hover:border-cyan-500 transition"
+            >
 
-              <tr className="border-b border-slate-700">
+              <div className="flex items-center gap-5">
 
-                <th className="p-4 text-left text-cyan-400">
-                  Rank
-                </th>
+                <div className="text-4xl">
+                  {medal(user.rank)}
+                </div>
 
-                <th className="p-4 text-left text-cyan-400">
-                  Username
-                </th>
+                <div>
 
-                <th className="p-4 text-left text-cyan-400">
-                  Problems
-                </th>
+                  <h2 className="text-xl font-bold text-white">
+                    #{user.rank} {user.full_name}
+                  </h2>
 
-                <th className="p-4 text-left text-cyan-400">
-                  Score
-                </th>
+                  <p className="text-slate-400">
+                    @{user.username}
+                  </p>
 
-              </tr>
+                  <p className="text-slate-500 text-sm">
+                    {user.college}
+                  </p>
 
-            </thead>
+                </div>
 
-            <tbody>
+              </div>
 
-              {leaders.map((user, index) => (
+              <div className="text-right">
 
-                <tr
-                  key={user.user_id}
-                  className="border-b border-slate-800 hover:bg-slate-800"
-                >
+                <h2 className="text-2xl font-bold text-cyan-400">
+                  ⭐ {user.score}
+                </h2>
 
-                  <td className="p-4 font-bold text-white">
+                <p className="text-slate-300">
+                  📚 {user.problems_solved} Problems
+                </p>
 
-                    {index + 1}
+                <p className="text-slate-500">
+                  ⏱ {user.total_time} min
+                </p>
 
-                  </td>
+              </div>
 
-                  <td className="p-4 text-white">
+            </div>
 
-                    {user.username}
-
-                  </td>
-
-                  <td className="p-4 text-cyan-400">
-
-                    {user.problems_solved}
-
-                  </td>
-
-                  <td className="p-4 text-yellow-400 font-semibold">
-
-                    {user.score}
-
-                  </td>
-
-                </tr>
-
-              ))}
-
-            </tbody>
-
-          </table>
+          ))}
 
         </div>
 
       </Card>
+
     </Shell>
   );
 }
