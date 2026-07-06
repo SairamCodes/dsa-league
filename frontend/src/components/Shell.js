@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../hooks/useAuth";
 import { setAuthToken } from "../api/client";
 import client from "../api/client";
+import Avatar from "./Avatar";
+import Cookies from "js-cookie";
 
 export default function Shell({ children }) {
   const navigate = useNavigate();
@@ -18,6 +20,10 @@ export default function Shell({ children }) {
     try {
       const res = await client.get("/users/me");
       setUser(res.data);
+      // Persist role in cookie so App.js can read it synchronously
+      if (res.data?.role) {
+        Cookies.set("dsa_league_role", res.data.role, { expires: 7 });
+      }
     } catch (err) {
       console.log(err);
     }
@@ -26,8 +32,11 @@ export default function Shell({ children }) {
   function logout() {
     clearToken();
     setAuthToken(null);
+    Cookies.remove("dsa_league_role");
     navigate("/login");
   }
+
+  const isAdmin = user?.role === "admin";
 
   return (
     <div className="min-h-screen bg-[#0f172a] text-white">
@@ -45,6 +54,10 @@ export default function Shell({ children }) {
 
           <nav className="flex items-center gap-6">
 
+            {user && (
+              <div className="mr-4"><Avatar src={user.profile_picture} name={user.full_name} size={2.5} /></div>
+            )}
+
             <Link
               to="/"
               className="hover:text-cyan-400"
@@ -52,36 +65,30 @@ export default function Shell({ children }) {
               Dashboard
             </Link>
 
-            <Link
-              to="/leaderboard"
-              className="hover:text-cyan-400"
-            >
-              Leaderboard
-            </Link>
+            {/* Member-only links */}
+            {!isAdmin && (
+              <>
+                <Link to="/leaderboard" className="hover:text-cyan-400">Leaderboard</Link>
+                <Link to="/profile" className="hover:text-cyan-400">Profile</Link>
+              </>
+            )}
 
-            <Link
-              to="/profile"
-              className="hover:text-cyan-400"
-            >
-              Profile
-            </Link>
+            {user?.role === "member" && (
+              <Link
+                to="/entries"
+                className="hover:text-cyan-400"
+              >
+                Entries
+              </Link>
+            )}
 
-            <Link
-              to="/entries"
-              className="hover:text-cyan-400"
-            >
-              Entries
-            </Link>
-
-            {user?.role === "admin" && (
-
+            {isAdmin && (
               <Link
                 to="/admin"
                 className="hover:text-cyan-400"
               >
-                Admin
+                Members
               </Link>
-
             )}
 
             <button

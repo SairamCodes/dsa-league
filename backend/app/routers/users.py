@@ -1,5 +1,3 @@
-from collections import Counter
-
 from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,102 +7,11 @@ from app.auth import (
     get_current_admin_user,
 )
 from app.db import get_session
-from app.models import DailyEntry, User
-from app.schemas import UserList, UserProfile
+from app.models import Achievement, Role, User
+from app.schemas import AchievementResponse, UserList, UserProfile
+from app.utils.statistics import build_user_profile
 
 router = APIRouter()
-
-
-async def build_profile(
-    session: AsyncSession,
-    user: User,
-):
-
-    result = await session.execute(
-        select(DailyEntry).where(
-            DailyEntry.user_id == user.id
-        )
-    )
-
-    entries = result.scalars().all()
-
-    total = len(entries)
-
-    easy = sum(
-        1 for e in entries
-        if e.difficulty.value == "Easy"
-    )
-
-    medium = sum(
-        1 for e in entries
-        if e.difficulty.value == "Medium"
-    )
-
-    hard = sum(
-        1 for e in entries
-        if e.difficulty.value == "Hard"
-    )
-
-    score = sum(
-        e.score
-        for e in entries
-    )
-
-    average = (
-        sum(e.time_taken for e in entries) / total
-        if total
-        else 0
-    )
-
-    patterns = Counter(
-        e.pattern.value
-        for e in entries
-    )
-
-    favorite = (
-        max(patterns, key=patterns.get)
-        if patterns
-        else None
-    )
-
-    weakest = (
-        min(patterns, key=patterns.get)
-        if patterns
-        else None
-    )
-
-    return UserProfile(
-        id=user.id,
-        username=user.username,
-        full_name=user.full_name,
-        college=user.college,
-        email=user.email,
-        role=user.role,
-        profile_picture=user.profile_picture,
-        created_at=user.created_at,
-
-        current_rank=1,
-        overall_rank=1,
-
-        current_score=score,
-        weekly_score=score,
-        monthly_score=score,
-
-        total_problems=total,
-
-        easy_count=easy,
-        medium_count=medium,
-        hard_count=hard,
-
-        current_streak=user.current_streak,
-        longest_streak=user.longest_streak,
-
-        average_time=float(average),
-
-        favorite_pattern=favorite,
-        weakest_pattern=weakest,
-        strongest_pattern=favorite,
-    )
 
 
 # ----------------------------
@@ -123,7 +30,7 @@ async def my_profile(
         get_session
     ),
 ):
-    return await build_profile(
+    return await build_user_profile(
         session,
         current_user,
     )
@@ -147,7 +54,7 @@ async def all_members(
 ):
 
     result = await session.execute(
-        select(User).order_by(
+        select(User).where(User.role == Role.member).order_by(
             User.username
         )
     )
@@ -176,6 +83,9 @@ async def update_profile(
     current_user.full_name = payload.full_name
     current_user.college = payload.college
     current_user.email = payload.email
+    # allow updating profile picture
+    if getattr(payload, 'profile_picture', None) is not None:
+        current_user.profile_picture = payload.profile_picture
 
     await session.commit()
 
@@ -186,3 +96,43 @@ async def update_profile(
     return UserList.model_validate(
         current_user
     )
+
+
+@router.put("/me/avatar", response_model=UserList)
+async def update_avatar(
+    payload: dict,
+    current_user: User = Depends(get_current_active_user),
+    session: AsyncSession = Depends(get_session),
+):
+    pic = payload.get("profile_picture")
+    if not pic:
+        return UserList.model_validate(current_user)
+    current_user.profile_picture = pic
+    await session.commit()
+    await session.refresh(current_user)
+    return UserList.model_validate(current_user)
+
+
+@router.get(
+    "/me/achievements",
+    response_model=list[AchievementResponse],
+)
+async def my_achievements(
+    current_user: User = Depends(get_current_active_user),
+    session: AsyncSession = Depends(get_session),
+):
+    result = await session.execute(
+        select(Achievement)
+        .where(Achievement.user_id == current_user.id)
+        .order_by(Achievement.awarded_at.desc())
+    )
+    return result.scalars().all()
+
+
+@router.get("/colleges")
+async def list_colleges(
+    session: AsyncSession = Depends(get_session),
+):
+    result = await session.execute(select(User.college))
+    colleges = sorted({c for (c,) in result.fetchall() if c})
+    return colleges

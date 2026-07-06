@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import Shell from "../components/Shell";
 import Card from "../components/Card";
 import client from "../api/client";
@@ -46,7 +47,9 @@ const difficulties = [
 ];
 
 export default function EntriesPage() {
+  const navigate = useNavigate();
   const [entries, setEntries] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
 
   const [form, setForm] = useState({
     platform: "LeetCode",
@@ -68,6 +71,12 @@ export default function EntriesPage() {
 
   async function loadEntries() {
     try {
+      const profileRes = await client.get("/users/me");
+      setCurrentUser(profileRes.data);
+      if (profileRes.data.role === "admin") {
+        navigate("/");
+        return;
+      }
       const res = await client.get("/entries/mine");
       setEntries(res.data);
     } catch (err) {
@@ -85,6 +94,7 @@ export default function EntriesPage() {
       });
 
       setEntries([res.data, ...entries]);
+      window.dispatchEvent(new Event('dsa-entry-submitted'))
 
       setForm({
         platform: "LeetCode",

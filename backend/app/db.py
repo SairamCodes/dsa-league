@@ -7,31 +7,48 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-DATABASE_URL = os.getenv("DATABASE_URL")
-print("DATABASE_URL =", DATABASE_URL)
 
-# Local development uses SQLite.
-# Render uses PostgreSQL via the DATABASE_URL environment variable.
-if not DATABASE_URL:
-    DATABASE_URL = "sqlite+aiosqlite:///./data/dsa_league.db"
+# Local SQLite database
+DEFAULT_SQLITE = "sqlite+aiosqlite:///./data/dsa_league.db"
 
-engine: AsyncEngine = create_async_engine(
-    DATABASE_URL,
-    echo=False,
-    future=True,
-)
+engine: AsyncEngine | None = None
 
 Base = declarative_base()
 
-AsyncSessionLocal = sessionmaker(
-    bind=engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-)
+AsyncSessionLocal: sessionmaker | None = None
+
+
+def _get_database_url() -> str:
+    # Always read the latest DATABASE_URL
+    return os.getenv("DATABASE_URL") or DEFAULT_SQLITE
+
 
 def get_engine() -> AsyncEngine:
+    global engine, AsyncSessionLocal
+
+    if engine is None:
+
+        engine = create_async_engine(
+            _get_database_url(),
+            echo=False,
+            future=True,
+        )
+
+        AsyncSessionLocal = sessionmaker(
+            bind=engine,
+            class_=AsyncSession,
+            expire_on_commit=False,
+        )
+
     return engine
 
+
 async def get_session():
+
+    # Ensure engine/sessionmaker exist
+    get_engine()
+
+    assert AsyncSessionLocal is not None
+
     async with AsyncSessionLocal() as session:
         yield session

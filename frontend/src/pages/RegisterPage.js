@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import client from "../api/client";
+import { getAvatarUrl } from "../utils/avatar";
+import { useEffect } from "react";
 
 export default function RegisterPage() {
   const navigate = useNavigate();
@@ -16,6 +18,14 @@ export default function RegisterPage() {
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [colleges, setColleges] = useState([])
+
+  useEffect(()=>{
+    async function load(){
+      try{ const res = await client.get('/users/colleges'); setColleges(res.data || []) }catch(e){}
+    }
+    load()
+  },[])
 
   const handleChange = (e) => {
     setForm({
@@ -36,12 +46,15 @@ export default function RegisterPage() {
     }
 
     try {
+      const avatar = getAvatarUrl(form.username || form.email || form.full_name)
+
       await client.post("/auth/register", {
         username: form.username,
         full_name: form.full_name,
         college: form.college,
         email: form.email,
         password: form.password,
+        profile_picture: avatar,
       });
 
       setSuccess("Registration successful!");
@@ -100,7 +113,7 @@ export default function RegisterPage() {
           <input
             type="text"
             name="college"
-            placeholder="College"
+            placeholder="College Name (e.g. Aditya College of Engineering and Technology)"
             value={form.college}
             onChange={handleChange}
             className="w-full rounded-lg border border-gray-300 bg-white p-3 text-black placeholder-gray-500"

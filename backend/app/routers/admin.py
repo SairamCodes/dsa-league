@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, delete
-from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import (
@@ -8,15 +7,15 @@ from app.auth import (
     get_password_hash,
 )
 from app.db import get_session
-from app.models import Role, User, DailyEntry
-from app.schemas import UserList
+from app.models import Achievement, DailyEntry, Notification, Role, User
+from app.schemas import AdminMemberResponse, UserList
+from app.utils.statistics import build_admin_member_rows
 
 router = APIRouter()
 
-@router.get("/members", response_model=list[UserList])
+@router.get("/members", response_model=list[AdminMemberResponse])
 async def get_members(current_user: User = Depends(get_current_admin_user), session: AsyncSession = Depends(get_session)):
-    result = await session.execute(select(User))
-    return result.scalars().all()
+    return await build_admin_member_rows(session)
 
 @router.post("/members", response_model=UserList)
 async def add_member(payload: UserList, current_user: User = Depends(get_current_admin_user), session: AsyncSession = Depends(get_session)):
@@ -46,7 +45,6 @@ async def delete_member(
     result = await session.execute(
         select(User).where(User.id == user_id)
     )
-
     user = result.scalars().first()
 
     if not user:
@@ -55,22 +53,18 @@ async def delete_member(
             detail="User not found",
         )
 
-    from app.models import Role
-
     if user.role == Role.admin:
         raise HTTPException(
             status_code=400,
             detail="Cannot delete admin account",
         )
 
-    await session.execute(
-        delete(DailyEntry).where(
-            DailyEntry.user_id == user.id
-        )
-    )
-
+    await session.execute(delete(DailyEntry).where(DailyEntry.user_id == user.id))
+    await session.execute(delete(Achievement).where(Achievement.user_id == user.id))
+    await session.execute(delete(Notification).where(Notification.user_id == user.id))
+    from app.models import OTP
+    await session.execute(delete(OTP).where(OTP.user_id == user.id))
     await session.delete(user)
-
     await session.commit()
 
     return {
@@ -103,78 +97,3 @@ async def reset_password(member_id: int, current_user: User = Depends(get_curren
     await session.commit()
     return {"message": "Password reset to default"}
 
-@router.get("/entries/pending")
-async def pending_entries(current_user: User = Depends(get_current_admin_user), session: AsyncSession = Depends(get_session)):
-    result = await session.execute(select(DailyEntry).where(DailyEntry.approved == False).order_by(DailyEntry.created_at.desc()))
-    return result.scalars().all()
-@router.put("/entries/{entry_id}/approve")
-async def approve_entry(
-    entry_id: int,
-    current_user: User = Depends(get_current_admin_user),
-    session: AsyncSession = Depends(get_session),
-):
-
-    result = await session.execute(
-        select(DailyEntry).where(DailyEntry.id == entry_id)
-    )
-
-    entry = result.scalars().first()
-
-    if not entry:
-        raise HTTPException(
-            status_code=404,
-            detail="Entry not found",
-        )
-
-    entry.approved = True
-
-    # Get the user
-    result = await session.execute(
-        select(User).where(User.id == entry.user_id)
-    )
-
-    user = result.scalars().first()
-
-    today = datetime.utcnow().date()
-
-    if user.last_submission_date is None:
-
-        user.current_streak = 1
-        user.longest_streak = 1
-
-    else:
-
-        last_date = user.last_submission_date.date()
-
-        if last_date == today:
-            # Already counted today
-            pass
-
-        elif last_date == today - timedelta(days=1):
-
-            user.current_streak += 1
-
-        else:
-
-            user.current_streak = 1
-
-        if user.current_streak > user.longest_streak:
-            user.longest_streak = user.current_streak
-
-    user.last_submission_date = datetime.utcnow()
-
-    await session.commit()
-
-    return {
-        "message": "Entry approved successfully"
-    }
-
-@router.put("/entries/{entry_id}/reject")
-async def reject_entry(entry_id: int, current_user: User = Depends(get_current_admin_user), session: AsyncSession = Depends(get_session)):
-    result = await session.execute(select(DailyEntry).where(DailyEntry.id == entry_id))
-    entry = result.scalars().first()
-    if not entry:
-        raise HTTPException(status_code=404, detail="Entry not found")
-    await session.delete(entry)
-    await session.commit()
-    return {"message": "Entry rejected"}

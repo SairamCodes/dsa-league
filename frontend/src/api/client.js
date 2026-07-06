@@ -2,7 +2,7 @@ import axios from "axios";
 import Cookies from "js-cookie";
 
 const client = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || "https://dsa-league-2.onrender.com/api",
+  baseURL: process.env.REACT_APP_API_URL || "http://localhost:8000/api",
   headers: {
     Accept: "application/json",
   },

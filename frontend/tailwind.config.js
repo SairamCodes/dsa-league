@@ -3,7 +3,12 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        surface: "#121421",
+        surface: "#0F172A",
+        card: "#1E293B",
+        primary: "#06B6D4",
+        success: "#22C55E",
+        warning: "#FACC15",
+        danger: "#EF4444",
         surface2: "#161b32",
         accent: "#5b91ff",
         accent2: "#8f75ff",

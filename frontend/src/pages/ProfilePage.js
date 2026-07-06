@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import Shell from "../components/Shell";
 import Card from "../components/Card";
 import client from "../api/client";
+import Avatar from "../components/Avatar";
 
 export default function ProfilePage() {
   const [profile, setProfile] = useState(null);
@@ -16,7 +17,14 @@ export default function ProfilePage() {
         <Card title="Profile Overview">
           <div className="space-y-6">
             <div className="flex items-center gap-4">
-              <div className="h-20 w-20 rounded-3xl bg-white/10"></div>
+              <Avatar src={profile?.profile_picture} name={profile?.full_name} size={5} />
+              <div>
+                <button onClick={async()=>{
+                  const {getAvatarUrl} = await import('../utils/avatar')
+                  const pic = getAvatarUrl(profile?.username || profile?.email || profile?.full_name)
+                  try{ await client.put('/users/me/avatar',{profile_picture: pic}); const res = await client.get('/users/me'); setProfile(res.data)}catch(e){console.error(e)}
+                }} className="text-sm text-accent mt-2">Change Avatar</button>
+              </div>
               <div>
                 <p className="text-sm text-white/70">{profile?.role === "admin" ? "Admin" : "Member"}</p>
                 <p className="text-3xl font-semibold">{profile?.full_name ?? "Loading..."}</p>

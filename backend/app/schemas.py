@@ -36,12 +36,13 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str
+    profile_picture: Optional[str] = None
 
 
 class AdminUserCreate(UserBase):
     role: Role
     password: str
-    profile_picture: Optional[HttpUrl] = None
+    profile_picture: Optional[str] = None
 
 
 class UserList(BaseModel):
@@ -55,6 +56,22 @@ class UserList(BaseModel):
     role: Role
     profile_picture: Optional[str]
     created_at: datetime
+
+
+class AdminMemberResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    username: str
+    full_name: str
+    college: Optional[str]
+    email: EmailStr
+    profile_picture: Optional[str]
+    created_at: datetime
+    total_problems: int
+    total_score: int
+    current_streak: int
+    longest_streak: int
 
 
 class UserProfile(UserList):
@@ -95,6 +112,17 @@ class AuthResponse(TokenResponse):
 
 class EmailRequest(BaseModel):
     email: EmailStr
+
+
+class OTPVerifyRequest(BaseModel):
+    email: EmailStr
+    code: str
+
+
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+    code: str
+    new_password: str
 
 
 # ---------------- DAILY ENTRIES ---------------- #

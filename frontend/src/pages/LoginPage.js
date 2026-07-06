@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import client, { setAuthToken } from "../api/client";
 import { useAuth } from "../hooks/useAuth";
+import Cookies from "js-cookie";
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -16,8 +17,12 @@ export default function LoginPage() {
     try {
       const response = await client.post("/auth/login", { username, password, remember_me: remember });
       const token = response.data.access_token;
+      const userRole = response.data.user?.role;
       saveToken(token, remember);
       setAuthToken(token);
+      if (userRole) {
+        Cookies.set("dsa_league_role", userRole, { expires: remember ? 7 : undefined });
+      }
       navigate("/");
     } catch (err) {
       setError("Invalid credentials or server error.");
@@ -68,12 +73,7 @@ export default function LoginPage() {
             Remember me
           </label>
 
-          <button
-            type="button"
-            className="text-accent hover:text-accent2"
-          >
-            Forgot password?
-          </button>
+          <Link to="/forgot-password" className="text-accent hover:text-accent2">Forgot password?</Link>
         </div>
 
         {error && (

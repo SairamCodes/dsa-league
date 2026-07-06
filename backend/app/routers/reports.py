@@ -1,18 +1,19 @@
 from collections import Counter
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends
-from sqlalchemy import select, func
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import get_current_active_user
+from app.auth import get_current_active_user, get_current_admin_user
 from app.db import get_session
-from app.models import DailyEntry, User, Role
+from app.models import DailyEntry, Role, User
 from app.schemas import (
     AnalyticsResponse,
     LeaderboardItem,
     SimpleReportResponse,
 )
+from app.utils.statistics import build_admin_overview, build_leaderboard, get_all_member_entries
 
 router = APIRouter()
 
@@ -24,72 +25,45 @@ async def analytics(
 ):
     yesterday = datetime.utcnow().date() - timedelta(days=1)
 
-    stmt = select(DailyEntry).where(DailyEntry.date >= yesterday)
-
-    # Member -> only own data
-    if current_user.role != Role.admin:
-        stmt = stmt.where(DailyEntry.user_id == current_user.id)
+    if current_user.role == Role.admin:
+        users = (
+            await session.execute(select(User).where(User.role == Role.member))
+        ).scalars().all()
+        member_ids = [u.id for u in users]
+        stmt = select(DailyEntry).where(
+            DailyEntry.date >= yesterday,
+            DailyEntry.user_id.in_(member_ids),
+        )
+    else:
+        stmt = select(DailyEntry).where(
+            DailyEntry.date >= yesterday,
+            DailyEntry.user_id == current_user.id,
+        )
 
     result = await session.execute(stmt)
     entries = result.scalars().all()
 
     problems_solved = len(entries)
-
     total_time = sum(e.time_taken for e in entries)
+    average_time = total_time / problems_solved if problems_solved else 0
 
-    average_time = (
-        total_time / problems_solved
-        if problems_solved
-        else 0
-    )
-
-    difficulty_distribution = Counter(
-        e.difficulty.value for e in entries
-    )
-
-    pattern_distribution = Counter(
-        e.pattern.value for e in entries
-    )
-
-    members_active = len(
-        set(e.user_id for e in entries)
-    )
+    difficulty_distribution = Counter(e.difficulty.value for e in entries)
+    pattern_distribution = Counter(e.pattern.value for e in entries)
+    members_active = len(set(e.user_id for e in entries))
 
     if current_user.role == Role.admin:
-
-        users = (
-            await session.execute(
-                select(User)
-            )
-        ).scalars().all()
-
-        username_map = {
-            u.id: u.username
-            for u in users
-        }
-
+        username_map = {u.id: u.username for u in users}
         members_missed = len(users) - members_active
-
-        solved_counter = Counter(
-            e.user_id for e in entries
-        )
-
+        solved_counter = Counter(e.user_id for e in entries)
         if solved_counter:
-
             top_id = solved_counter.most_common(1)[0][0]
-
             weak_id = solved_counter.most_common()[-1][0]
-
             top_performer = username_map[top_id]
             weakest_member = username_map[weak_id]
-
         else:
-
             top_performer = "-"
             weakest_member = "-"
-
     else:
-
         members_missed = 0
         top_performer = current_user.username
         weakest_member = current_user.username
@@ -142,57 +116,21 @@ async def leaderboard(
     current_user: User = Depends(get_current_active_user),
     session: AsyncSession = Depends(get_session),
 ):
-
-    result = await session.execute(
-        select(User)
-    )
-
-    users = result.scalars().all()
-
-    leaderboard = []
-
-    for user in users:
-
-        entries = (
-            await session.execute(
-                select(DailyEntry).where(
-                    DailyEntry.user_id == user.id,
-                    DailyEntry.approved == True,
-                )
-            )
-        ).scalars().all()
-
-        problems = len(entries)
-
-        total_score = sum(e.score for e in entries)
-
-        total_time = sum(e.time_taken for e in entries)
-
-        leaderboard.append(
-            {
-                "id": user.id,
-                "username": user.username,
-                "full_name": user.full_name,
-                "college": user.college,
-                "score": total_score,
-                "problems_solved": problems,
-                "total_time": total_time,
-                "role": user.role,
-            }
+    if current_user.role == Role.admin:
+        raise HTTPException(
+            status_code=403,
+            detail="Admins cannot access member leaderboard.",
         )
 
-    leaderboard.sort(
-        key=lambda x: (
-            x["score"],
-            x["problems_solved"],
-        ),
-        reverse=True,
-    )
+    return await build_leaderboard(session)
 
-    for index, member in enumerate(leaderboard):
-        member["rank"] = index + 1
 
-    return leaderboard
+@router.get("/admin/overview")
+async def admin_overview(
+    current_user: User = Depends(get_current_admin_user),
+    session: AsyncSession = Depends(get_session),
+):
+    return await build_admin_overview(session)
 
 
 async def build_report(
@@ -203,78 +141,30 @@ async def build_report(
 ):
 
     start = datetime.utcnow().date() - timedelta(days=days)
+    board = await build_leaderboard(session, start_date=start)
 
-    stmt = select(DailyEntry).where(
-        DailyEntry.date >= start
-    )
-
-    if current_user.role != Role.admin:
-        stmt = stmt.where(
-            DailyEntry.user_id == current_user.id
-        )
-
-    entries = (
-        await session.execute(stmt)
-    ).scalars().all()
-
-    leaderboard = []
-
-    if current_user.role == Role.admin:
-
-        counts = Counter(
-            e.user_id for e in entries
-        )
-
-        users = (
-            await session.execute(select(User))
-        ).scalars().all()
-
-        user_map = {
-            u.id: u.username
-            for u in users
-        }
-
-        for uid, solved in counts.items():
-
-            leaderboard.append(
-                LeaderboardItem(
-                    user_id=uid,
-                    username=user_map[uid],
-                    score=0,
-                    streak=0,
-                    problems_solved=solved,
-                    rank_change=0,
-                )
-            )
-
-    else:
-
-        leaderboard.append(
-            LeaderboardItem(
-                user_id=current_user.id,
-                username=current_user.username,
-                score=sum(e.score for e in entries),
-                streak=0,
-                problems_solved=len(entries),
-                rank_change=0,
-            )
-        )
+    total_problems = sum(item["problems_solved"] for item in board)
+    total_score = sum(item["score"] for item in board)
 
     return SimpleReportResponse(
         period=period,
-        total_problems=len(entries),
-        average_problems=len(entries) / days,
-        average_score=sum(e.score for e in entries) / days
-        if entries
-        else 0,
-        leaderboard=leaderboard,
-        most_active=current_user.username,
+        total_problems=total_problems,
+        average_problems=total_problems / days if days else 0,
+        average_score=total_score / days if days else 0,
+        leaderboard=[
+            LeaderboardItem(
+                user_id=item["user_id"],
+                username=item["username"],
+                score=item["score"],
+                streak=item["current_streak"],
+                problems_solved=item["problems_solved"],
+                rank_change=item.get("rank_change", 0),
+            )
+            for item in board
+        ],
+        most_active=board[0]["username"] if board else "-",
         most_consistent="-",
         most_missed_days="-",
-        pattern_analysis=dict(
-            Counter(e.pattern.value for e in entries)
-        ),
-        difficulty_analysis=dict(
-            Counter(e.difficulty.value for e in entries)
-        ),
+        pattern_analysis={},
+        difficulty_analysis={},
     )
