@@ -5,11 +5,18 @@ from sqlalchemy.ext.asyncio import (
     AsyncSession,
     create_async_engine,
 )
+
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 
-# Local SQLite database
-DEFAULT_SQLITE = "sqlite+aiosqlite:///./data/dsa_league.db"
+def _get_database_url():
+    database_url = os.getenv("DATABASE_URL")
+
+    if not database_url:
+        raise RuntimeError("DATABASE_URL is not set")
+
+    return database_url
+
 
 engine: AsyncEngine | None = None
 
@@ -19,11 +26,11 @@ AsyncSessionLocal: sessionmaker | None = None
 
 
 def _get_database_url() -> str:
-    # Always read the latest DATABASE_URL
-    return os.getenv("DATABASE_URL") or DEFAULT_SQLITE
+    return os.getenv("DATABASE_URL") or DEFAULT_DATABASE_URL
 
 
 def get_engine() -> AsyncEngine:
+
     global engine, AsyncSessionLocal
 
     if engine is None:
@@ -45,7 +52,6 @@ def get_engine() -> AsyncEngine:
 
 async def get_session():
 
-    # Ensure engine/sessionmaker exist
     get_engine()
 
     assert AsyncSessionLocal is not None
